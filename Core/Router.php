@@ -5,36 +5,45 @@ namespace Core;
 class Router
 {
 
-    protected $routes;
+    private array $routes = [];
 
-    private function addRoute($route, $controller, $action, $method)
+    public function get(string $path, callable|array $callback)
     {
-        $this->routes[$method][$route] = ['controller' => $controller, 'action' => $action];
+        $this->addRoute('GET', $path, $callback);
     }
 
-    function get($route, $controller, $action)
+    public function post(string $path, callable|array $callback)
     {
-        $this->addRoute($route, $controller, $action, 'GET');
+        $this->addRoute('POST', $path, $callback);
     }
 
-    function post($route, $controller, $action)
+    public function addRoute(string $method, string $path, callable|array $callback)
     {
-        $this->addRoute($route, $controller, $action, 'POST');
+        $this->routes[] = [
+            'method' => $method,
+            'path' => $path,
+            'callback' => $callback
+        ];
     }
 
     public function dispatch()
     {
-        $uri = strtok($_SERVER['REQUEST_URI'], '?');
-        $method =  $_SERVER['REQUEST_METHOD'];
+        $request_method = $_SERVER['REQUEST_METHOD'];
+        $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
-        if (array_key_exists($uri, $this->routes[$method])) {
-            $controller = $this->routes[$method][$uri]['controller'];
-            $action = $this->routes[$method][$uri]['action'];
+        foreach ($this->routes as $route) {
+            $pattern = preg_replace('#\{[\w]+\}#', '([\w-]+)', $route['path']);
+            $pattern = "#^$pattern$#";
 
-            $controller = new $controller();
-            $controller->$action();
-        } else {
-            throw new \Exception("No route found for URI: $uri");
+            if ($route['method'] === $request_method && preg_match($pattern, $path, $matches)) {
+                array_shift($matches);
+                [$class, $method2] = $route['callback'];
+                $controller = new $class();
+                return $controller->$method2();
+            }
         }
+
+        http_response_code(404);
+        return "404 Not Found";
     }
 }
